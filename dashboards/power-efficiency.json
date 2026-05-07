@@ -1,0 +1,461 @@
+{
+  "title": "Inferscope — Power & Efficiency",
+  "uid": "inferscope-power",
+  "version": 1,
+  "schemaVersion": 39,
+  "refresh": "1m",
+  "time": { "from": "now-24h", "to": "now" },
+  "timezone": "browser",
+  "tags": ["inferscope", "power", "efficiency", "kubernetes"],
+  "description": "GPU power consumption and token efficiency. Identifies which GPUs deliver the most tokens per watt and which consume the most energy.",
+
+  "templating": {
+    "list": [
+      {
+        "name": "cluster",
+        "type": "query",
+        "label": "Cluster",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "query": "label_values(gpu_power_watts, cluster)",
+        "refresh": 2,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "sort": 1,
+        "current": {}
+      },
+      {
+        "name": "node",
+        "type": "query",
+        "label": "Node",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "query": "label_values(gpu_power_watts{cluster=~\"$cluster\"}, node)",
+        "refresh": 2,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "sort": 1,
+        "current": {}
+      },
+      {
+        "name": "gpu",
+        "type": "query",
+        "label": "GPU",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "query": "label_values(gpu_power_watts{cluster=~\"$cluster\", node=~\"$node\"}, gpu_id)",
+        "refresh": 2,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "sort": 1,
+        "current": {}
+      }
+    ]
+  },
+
+  "panels": [
+
+    {
+      "id": 1,
+      "title": "Total Power Draw — Right Now",
+      "description": "Sum of all GPU power across selected nodes.",
+      "type": "stat",
+      "gridPos": { "x": 0, "y": 0, "w": 4, "h": 4 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "watt",
+          "decimals": 0,
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "green", "value": null },
+            { "color": "yellow", "value": 300 },
+            { "color": "red", "value": 600 }
+          ]}
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "area" },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "sum(gpu_power_watts{cluster=~\"$cluster\", node=~\"$node\", gpu_id=~\"$gpu\"})",
+          "legendFormat": "watts"
+        }
+      ]
+    },
+
+    {
+      "id": 2,
+      "title": "Avg Power per GPU — Selected Period",
+      "type": "stat",
+      "gridPos": { "x": 4, "y": 0, "w": 4, "h": 4 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "watt",
+          "decimals": 1,
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "green", "value": null },
+            { "color": "yellow", "value": 150 },
+            { "color": "red", "value": 300 }
+          ]}
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["mean"] }, "colorMode": "background", "graphMode": "area" },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "avg(gpu_power_watts{cluster=~\"$cluster\", node=~\"$node\", gpu_id=~\"$gpu\"})",
+          "legendFormat": "avg W"
+        }
+      ]
+    },
+
+    {
+      "id": 3,
+      "title": "Best Efficiency — tok/W",
+      "description": "Highest tokens per watt across all selected GPUs right now.",
+      "type": "stat",
+      "gridPos": { "x": 8, "y": 0, "w": 4, "h": 4 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 2,
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "red", "value": null },
+            { "color": "yellow", "value": 1 },
+            { "color": "green", "value": 5 }
+          ]}
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "max(gpu_inference_tokens_per_watt{cluster=~\"$cluster\", node=~\"$node\"})",
+          "legendFormat": "tok/W"
+        }
+      ]
+    },
+
+    {
+      "id": 4,
+      "title": "Worst Efficiency — tok/W",
+      "description": "Lowest tokens per watt — the least green GPU currently active.",
+      "type": "stat",
+      "gridPos": { "x": 12, "y": 0, "w": 4, "h": 4 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 2,
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "red", "value": null },
+            { "color": "yellow", "value": 1 },
+            { "color": "green", "value": 5 }
+          ]}
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "min(gpu_inference_tokens_per_watt{cluster=~\"$cluster\", node=~\"$node\"} > 0)",
+          "legendFormat": "tok/W"
+        }
+      ]
+    },
+
+    {
+      "id": 5,
+      "title": "Estimated Energy — Selected Period",
+      "description": "Approximate energy consumed: average watts × time range in hours.",
+      "type": "stat",
+      "gridPos": { "x": 16, "y": 0, "w": 4, "h": 4 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "kwatth",
+          "decimals": 2,
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] }
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "sum(avg_over_time(gpu_power_watts{cluster=~\"$cluster\", node=~\"$node\", gpu_id=~\"$gpu\"}[$__range])) * ($__range_s / 3600) / 1000",
+          "legendFormat": "kWh"
+        }
+      ]
+    },
+
+    {
+      "id": 6,
+      "title": "Tokens per kWh",
+      "description": "Total tokens generated divided by estimated energy consumed. Higher is greener.",
+      "type": "stat",
+      "gridPos": { "x": 20, "y": 0, "w": 4, "h": 4 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "red", "value": null },
+            { "color": "yellow", "value": 100000 },
+            { "color": "green", "value": 1000000 }
+          ]}
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "sum(increase(gpu_inference_generated_tokens_total{cluster=~\"$cluster\", node=~\"$node\"}[$__range])) / (sum(avg_over_time(gpu_power_watts{cluster=~\"$cluster\", node=~\"$node\", gpu_id=~\"$gpu\"}[$__range])) * ($__range_s / 3600) / 1000)",
+          "legendFormat": "tok/kWh"
+        }
+      ]
+    },
+
+    {
+      "id": 10,
+      "title": "Efficiency Ranking — Tokens per Watt per GPU",
+      "description": "Average tokens/watt over the selected period. Green = efficient, red = energy-hungry relative to output. GPUs with no token metrics show 0 (idle or runtime without /metrics).",
+      "type": "bargauge",
+      "gridPos": { "x": 0, "y": 4, "w": 12, "h": 10 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 2,
+          "min": 0,
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "red", "value": null },
+            { "color": "yellow", "value": 1 },
+            { "color": "green", "value": 5 }
+          ]},
+          "color": { "mode": "thresholds" }
+        }
+      },
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "reduceOptions": { "calcs": ["mean"] },
+        "showUnfilled": true
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "avg by (node, gpu_name, gpu_id, vendor) (avg_over_time(gpu_inference_tokens_per_watt{cluster=~\"$cluster\", node=~\"$node\"}[$__range]))",
+          "legendFormat": "{{node}} / gpu{{gpu_id}} ({{gpu_name}})",
+          "instant": true
+        }
+      ]
+    },
+
+    {
+      "id": 11,
+      "title": "Power Draw Ranking — Average Watts per GPU",
+      "description": "Which GPUs consume the most power on average. High power is not bad if efficiency (tok/W) is also high.",
+      "type": "bargauge",
+      "gridPos": { "x": 12, "y": 4, "w": 12, "h": 10 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "watt",
+          "decimals": 0,
+          "min": 0,
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "green", "value": null },
+            { "color": "yellow", "value": 150 },
+            { "color": "red", "value": 300 }
+          ]},
+          "color": { "mode": "thresholds" }
+        }
+      },
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "reduceOptions": { "calcs": ["mean"] },
+        "showUnfilled": true
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "avg by (node, gpu_name, gpu_id, vendor) (avg_over_time(gpu_power_watts{cluster=~\"$cluster\", node=~\"$node\", gpu_id=~\"$gpu\"}[$__range]))",
+          "legendFormat": "{{node}} / gpu{{gpu_id}} ({{gpu_name}})",
+          "instant": true
+        }
+      ]
+    },
+
+    {
+      "id": 20,
+      "title": "Power Draw Over Time — Per GPU",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 14, "w": 12, "h": 8 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "watt",
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 8, "showPoints": "never", "spanNulls": true }
+        }
+      },
+      "options": {
+        "tooltip": { "mode": "multi", "sort": "desc" },
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "gpu_power_watts{cluster=~\"$cluster\", node=~\"$node\", gpu_id=~\"$gpu\"}",
+          "legendFormat": "{{node}} / gpu{{gpu_id}} ({{gpu_name}})"
+        }
+      ]
+    },
+
+    {
+      "id": 21,
+      "title": "Tokens per Watt Over Time",
+      "description": "Efficiency trend. Drops when a GPU is consuming power but generating few tokens (idle-warm or non-inference workloads).",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 14, "w": 12, "h": 8 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 2,
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 8, "showPoints": "never", "spanNulls": true },
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "red", "value": null },
+            { "color": "yellow", "value": 1 },
+            { "color": "green", "value": 5 }
+          ]}
+        }
+      },
+      "options": {
+        "tooltip": { "mode": "multi", "sort": "desc" },
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "gpu_inference_tokens_per_watt{cluster=~\"$cluster\", node=~\"$node\"}",
+          "legendFormat": "{{node}} / {{model}}"
+        }
+      ]
+    },
+
+    {
+      "id": 30,
+      "title": "Power Efficiency Summary — Per Node",
+      "description": "Combined view: average power, average tokens/s, and average tok/W per node over the selected period.",
+      "type": "table",
+      "gridPos": { "x": 0, "y": 22, "w": 24, "h": 8 },
+      "fieldConfig": {
+        "defaults": { "custom": { "align": "left" } },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "avg power (W)" },
+            "properties": [
+              { "id": "unit", "value": "watt" },
+              { "id": "custom.width", "value": 140 },
+              { "id": "custom.displayMode", "value": "color-background-solid" },
+              { "id": "thresholds", "value": { "mode": "absolute", "steps": [
+                { "color": "green", "value": null },
+                { "color": "yellow", "value": 150 },
+                { "color": "red", "value": 300 }
+              ]}}
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "avg tok/s" },
+            "properties": [
+              { "id": "unit", "value": "short" },
+              { "id": "custom.width", "value": 120 }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "avg tok/W" },
+            "properties": [
+              { "id": "unit", "value": "short" },
+              { "id": "decimals", "value": 2 },
+              { "id": "custom.width", "value": 120 },
+              { "id": "custom.displayMode", "value": "color-background-solid" },
+              { "id": "thresholds", "value": { "mode": "absolute", "steps": [
+                { "color": "red", "value": null },
+                { "color": "yellow", "value": 1 },
+                { "color": "green", "value": 5 }
+              ]}}
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "est. kWh" },
+            "properties": [
+              { "id": "unit", "value": "kwatth" },
+              { "id": "decimals", "value": 3 },
+              { "id": "custom.width", "value": 110 }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "tokens (period)" },
+            "properties": [
+              { "id": "unit", "value": "short" },
+              { "id": "decimals", "value": 0 },
+              { "id": "custom.width", "value": 140 }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "sortBy": [{ "displayName": "avg tok/W", "desc": true }],
+        "footer": {
+          "show": true,
+          "reducer": ["sum"],
+          "fields": ["avg power (W)", "est. kWh", "tokens (period)"]
+        }
+      },
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "renameByName": {
+              "Value #power": "avg power (W)",
+              "Value #toks": "avg tok/s",
+              "Value #tokw": "avg tok/W",
+              "Value #kwh": "est. kWh",
+              "Value #total": "tokens (period)"
+            }
+          }
+        }
+      ],
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "sum by (cluster, node) (avg_over_time(gpu_power_watts{cluster=~\"$cluster\", node=~\"$node\", gpu_id=~\"$gpu\"}[$__range]))",
+          "instant": true, "refId": "power", "legendFormat": ""
+        },
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "sum by (cluster, node) (avg_over_time(gpu_inference_tokens_per_second{cluster=~\"$cluster\", node=~\"$node\"}[$__range]))",
+          "instant": true, "refId": "toks", "legendFormat": ""
+        },
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "avg by (cluster, node) (avg_over_time(gpu_inference_tokens_per_watt{cluster=~\"$cluster\", node=~\"$node\"}[$__range]))",
+          "instant": true, "refId": "tokw", "legendFormat": ""
+        },
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "sum by (cluster, node) (avg_over_time(gpu_power_watts{cluster=~\"$cluster\", node=~\"$node\", gpu_id=~\"$gpu\"}[$__range])) * ($__range_s / 3600) / 1000",
+          "instant": true, "refId": "kwh", "legendFormat": ""
+        },
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "sum by (cluster, node) (increase(gpu_inference_generated_tokens_total{cluster=~\"$cluster\", node=~\"$node\"}[$__range]))",
+          "instant": true, "refId": "total", "legendFormat": ""
+        }
+      ]
+    }
+
+  ]
+}

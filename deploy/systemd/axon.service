@@ -1,0 +1,42 @@
+[Unit]
+Description=Axon — Inferscope GPU Node Agent
+Documentation=https://github.com/youorg/inferscope
+After=network.target
+# If running alongside ROCm:
+# After=rocm-smi.service
+
+[Service]
+Type=simple
+User=root
+Group=root
+
+ExecStart=/usr/local/bin/axon \
+    --listen-address=:9101 \
+    --poll-interval=5s \
+    --hw-interval=2s \
+    --amd=true \
+    --nvidia=true \
+    --intel=true
+
+# Restart on crash
+Restart=on-failure
+RestartSec=5s
+
+# Hardening — keep only what's needed
+# ProtectSystem=strict would block /proc access, so we leave it off
+PrivateTmp=false
+NoNewPrivileges=false
+
+# Required capabilities:
+# - CAP_SYS_PTRACE: read /proc/<pid>/fd, environ, cmdline of other processes
+# - CAP_DAC_READ_SEARCH: read fd symlinks for processes owned by other users
+AmbientCapabilities=CAP_SYS_PTRACE CAP_DAC_READ_SEARCH
+CapabilityBoundingSet=CAP_SYS_PTRACE CAP_DAC_READ_SEARCH
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=axon
+
+[Install]
+WantedBy=multi-user.target

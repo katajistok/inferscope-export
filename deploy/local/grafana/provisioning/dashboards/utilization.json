@@ -1,0 +1,574 @@
+{
+  "title": "Inferscope — GPU Utilization & Health",
+  "uid": "inferscope-utilization",
+  "version": 1,
+  "schemaVersion": 39,
+  "refresh": "30s",
+  "time": { "from": "now-24h", "to": "now" },
+  "timezone": "browser",
+  "tags": ["inferscope", "utilization", "health", "kubernetes"],
+  "description": "Are we utilizing expensive GPU hardware well? Shows utilization rates against the 75% target, memory consumption, and what is running on each GPU. Primary dashboard for hardware ROI reporting.",
+
+  "templating": {
+    "list": [
+      {
+        "name": "cluster",
+        "type": "query",
+        "label": "Cluster",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "query": "label_values(gpu_utilization_percent, cluster)",
+        "refresh": 2,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "sort": 1,
+        "current": {}
+      },
+      {
+        "name": "node",
+        "type": "query",
+        "label": "Node",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "query": "label_values(gpu_utilization_percent{cluster=~\"$cluster\"}, node)",
+        "refresh": 2,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "sort": 1,
+        "current": {}
+      },
+      {
+        "name": "gpu",
+        "type": "query",
+        "label": "GPU",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "query": "label_values(gpu_utilization_percent{cluster=~\"$cluster\", node=~\"$node\"}, gpu_id)",
+        "refresh": 2,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "sort": 1,
+        "current": {}
+      }
+    ]
+  },
+
+  "panels": [
+
+    {
+      "id": 1,
+      "title": "Fleet Average Utilization",
+      "description": "Average GPU utilization across all selected GPUs over the selected period. Target: ≥ 75%.",
+      "type": "gauge",
+      "gridPos": { "x": 0, "y": 0, "w": 5, "h": 6 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "min": 0,
+          "max": 100,
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "red", "value": null },
+            { "color": "yellow", "value": 50 },
+            { "color": "green", "value": 75 }
+          ]},
+          "color": { "mode": "thresholds" }
+        }
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["mean"] },
+        "showThresholdLabels": true,
+        "showThresholdMarkers": true
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "avg(avg_over_time(gpu_utilization_percent{cluster=~\"$cluster\", node=~\"$node\", gpu_id=~\"$gpu\"}[$__range]))",
+          "legendFormat": "avg util"
+        }
+      ]
+    },
+
+    {
+      "id": 2,
+      "title": "GPUs Above 75% Target",
+      "description": "How many GPUs met the ≥75% average utilization target over the selected period.",
+      "type": "stat",
+      "gridPos": { "x": 5, "y": 0, "w": 4, "h": 3 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "red", "value": null },
+            { "color": "green", "value": 1 }
+          ]}
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "count(avg by (node, gpu_id) (avg_over_time(gpu_utilization_percent{cluster=~\"$cluster\", node=~\"$node\", gpu_id=~\"$gpu\"}[$__range])) >= 75) or vector(0)",
+          "legendFormat": "≥ 75%",
+          "instant": true
+        }
+      ]
+    },
+
+    {
+      "id": 3,
+      "title": "GPUs Below 75% Target",
+      "description": "GPUs that did not reach the utilization target — underutilized hardware.",
+      "type": "stat",
+      "gridPos": { "x": 5, "y": 3, "w": 4, "h": 3 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "green", "value": null },
+            { "color": "yellow", "value": 1 },
+            { "color": "red", "value": 3 }
+          ]}
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "count(avg by (node, gpu_id) (avg_over_time(gpu_utilization_percent{cluster=~\"$cluster\", node=~\"$node\", gpu_id=~\"$gpu\"}[$__range])) < 75) or vector(0)",
+          "legendFormat": "< 75%",
+          "instant": true
+        }
+      ]
+    },
+
+    {
+      "id": 4,
+      "title": "Fleet Average VRAM Usage",
+      "description": "Average VRAM utilization across all selected GPUs.",
+      "type": "gauge",
+      "gridPos": { "x": 9, "y": 0, "w": 5, "h": 6 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "min": 0,
+          "max": 100,
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "green", "value": null },
+            { "color": "yellow", "value": 80 },
+            { "color": "red", "value": 92 }
+          ]},
+          "color": { "mode": "thresholds" }
+        }
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["mean"] },
+        "showThresholdLabels": true,
+        "showThresholdMarkers": true
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "avg(avg_over_time((gpu_memory_used_mib{cluster=~\"$cluster\", node=~\"$node\", gpu_id=~\"$gpu\"} / gpu_memory_total_mib{cluster=~\"$cluster\", node=~\"$node\", gpu_id=~\"$gpu\"} * 100)[$__range]))",
+          "legendFormat": "avg VRAM %"
+        }
+      ]
+    },
+
+    {
+      "id": 5,
+      "title": "Currently Active Models",
+      "type": "stat",
+      "gridPos": { "x": 14, "y": 0, "w": 4, "h": 3 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "count(gpu_process_running{cluster=~\"$cluster\", node=~\"$node\"} == 1) or vector(0)",
+          "legendFormat": "running"
+        }
+      ]
+    },
+
+    {
+      "id": 6,
+      "title": "Total GPUs in Selection",
+      "type": "stat",
+      "gridPos": { "x": 14, "y": 3, "w": 4, "h": 3 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] }
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "count(gpu_utilization_percent{cluster=~\"$cluster\", node=~\"$node\", gpu_id=~\"$gpu\"})",
+          "legendFormat": "GPUs"
+        }
+      ]
+    },
+
+    {
+      "id": 7,
+      "title": "Current tok/s (fleet)",
+      "type": "stat",
+      "gridPos": { "x": 18, "y": 0, "w": 6, "h": 3 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "red", "value": null },
+            { "color": "yellow", "value": 50 },
+            { "color": "green", "value": 500 }
+          ]}
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "area" },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "sum(gpu_inference_tokens_per_second{cluster=~\"$cluster\", node=~\"$node\"})",
+          "legendFormat": "tok/s"
+        }
+      ]
+    },
+
+    {
+      "id": 8,
+      "title": "Tokens Generated (period)",
+      "type": "stat",
+      "gridPos": { "x": 18, "y": 3, "w": 6, "h": 3 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] }
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "sum(increase(gpu_inference_generated_tokens_total{cluster=~\"$cluster\", node=~\"$node\"}[$__range]))",
+          "legendFormat": "tokens"
+        }
+      ]
+    },
+
+    {
+      "id": 10,
+      "title": "GPU Utilization — Per GPU vs 75% Target",
+      "description": "Average utilization per GPU over the selected period. Red line marks the 75% target. Bars below the line indicate underutilized hardware.",
+      "type": "bargauge",
+      "gridPos": { "x": 0, "y": 6, "w": 14, "h": 9 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "red", "value": null },
+            { "color": "yellow", "value": 50 },
+            { "color": "green", "value": 75 }
+          ]},
+          "color": { "mode": "thresholds" }
+        }
+      },
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "reduceOptions": { "calcs": ["mean"] },
+        "showUnfilled": true,
+        "minVizWidth": 0,
+        "minVizHeight": 16
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "avg by (cluster, node, gpu_id, gpu_name, vendor) (avg_over_time(gpu_utilization_percent{cluster=~\"$cluster\", node=~\"$node\", gpu_id=~\"$gpu\"}[$__range]))",
+          "legendFormat": "{{node}} / gpu{{gpu_id}} ({{gpu_name}})",
+          "instant": true
+        }
+      ]
+    },
+
+    {
+      "id": 11,
+      "title": "VRAM Usage — Per GPU",
+      "description": "Average VRAM utilization per GPU. High VRAM usage with low compute utilization indicates a model is loaded but not serving requests.",
+      "type": "bargauge",
+      "gridPos": { "x": 14, "y": 6, "w": 10, "h": 9 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "green", "value": null },
+            { "color": "yellow", "value": 80 },
+            { "color": "red", "value": 92 }
+          ]},
+          "color": { "mode": "thresholds" }
+        }
+      },
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "reduceOptions": { "calcs": ["mean"] },
+        "showUnfilled": true
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "avg by (cluster, node, gpu_id, gpu_name) (avg_over_time((gpu_memory_used_mib{cluster=~\"$cluster\", node=~\"$node\", gpu_id=~\"$gpu\"} / gpu_memory_total_mib{cluster=~\"$cluster\", node=~\"$node\", gpu_id=~\"$gpu\"} * 100)[$__range]))",
+          "legendFormat": "{{node}} / gpu{{gpu_id}} ({{gpu_name}})",
+          "instant": true
+        }
+      ]
+    },
+
+    {
+      "id": 20,
+      "title": "GPU Utilization Over Time",
+      "description": "Utilization trend per GPU. The dashed line at 75% is the target threshold.",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 15, "w": 24, "h": 9 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 6, "showPoints": "never", "spanNulls": true }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "Target (75%)" },
+            "properties": [
+              { "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } },
+              { "id": "custom.lineWidth", "value": 1 },
+              { "id": "custom.lineStyle", "value": { "dash": [8, 4], "fill": "dash" } },
+              { "id": "custom.fillOpacity", "value": 0 }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "tooltip": { "mode": "multi", "sort": "desc" },
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max", "min"] }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "gpu_utilization_percent{cluster=~\"$cluster\", node=~\"$node\", gpu_id=~\"$gpu\"}",
+          "legendFormat": "{{node}} / gpu{{gpu_id}} ({{gpu_name}})"
+        },
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "vector(75)",
+          "legendFormat": "Target (75%)"
+        }
+      ]
+    },
+
+    {
+      "id": 21,
+      "title": "VRAM Usage Over Time (MiB)",
+      "description": "Raw VRAM used and total per GPU. Useful for understanding model loading and memory pressure.",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 24, "w": 12, "h": 8 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "decmbytes",
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 8, "showPoints": "never", "spanNulls": true }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byRegexp", "options": ".*total.*" },
+            "properties": [
+              { "id": "custom.lineStyle", "value": { "dash": [6, 3], "fill": "dash" } },
+              { "id": "custom.fillOpacity", "value": 0 }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "tooltip": { "mode": "multi", "sort": "desc" },
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "gpu_memory_used_mib{cluster=~\"$cluster\", node=~\"$node\", gpu_id=~\"$gpu\"}",
+          "legendFormat": "used — {{node}} / gpu{{gpu_id}} ({{gpu_name}})"
+        },
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "gpu_memory_total_mib{cluster=~\"$cluster\", node=~\"$node\", gpu_id=~\"$gpu\"}",
+          "legendFormat": "total — {{node}} / gpu{{gpu_id}} ({{gpu_name}})"
+        }
+      ]
+    },
+
+    {
+      "id": 22,
+      "title": "Utilization Distribution",
+      "description": "What percentage of time did each GPU spend in each utilization band during the selected period? Useful for understanding utilization patterns.",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 24, "w": 12, "h": 8 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 6, "showPoints": "never" }
+        }
+      },
+      "options": {
+        "tooltip": { "mode": "multi", "sort": "desc" },
+        "legend": { "displayMode": "list", "placement": "bottom" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "avg by (node, gpu_id) (avg_over_time((gpu_utilization_percent{cluster=~\"$cluster\", node=~\"$node\", gpu_id=~\"$gpu\"} >= 75)[5m:1m])) * 100",
+          "legendFormat": "≥75% — {{node}} / gpu{{gpu_id}}"
+        },
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "avg by (node, gpu_id) (avg_over_time((gpu_utilization_percent{cluster=~\"$cluster\", node=~\"$node\", gpu_id=~\"$gpu\"} < 75)[5m:1m])) * 100",
+          "legendFormat": "<75% — {{node}} / gpu{{gpu_id}}"
+        }
+      ]
+    },
+
+    {
+      "id": 30,
+      "title": "GPU Utilization & Memory — Detailed Node View",
+      "description": "Full breakdown per node and GPU: average utilization, VRAM used/total, whether target is met, and what model is loaded. VRAM used vs total gives a clear picture of memory pressure.",
+      "type": "table",
+      "gridPos": { "x": 0, "y": 32, "w": 24, "h": 10 },
+      "fieldConfig": {
+        "defaults": { "custom": { "align": "left" } },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "avg util %" },
+            "properties": [
+              { "id": "unit", "value": "percent" },
+              { "id": "decimals", "value": 1 },
+              { "id": "custom.width", "value": 120 },
+              { "id": "custom.displayMode", "value": "color-background-solid" },
+              { "id": "thresholds", "value": { "mode": "absolute", "steps": [
+                { "color": "red", "value": null },
+                { "color": "yellow", "value": 50 },
+                { "color": "green", "value": 75 }
+              ]}}
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "VRAM used (MiB)" },
+            "properties": [
+              { "id": "unit", "value": "decmbytes" },
+              { "id": "decimals", "value": 0 },
+              { "id": "custom.width", "value": 140 }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "VRAM total (MiB)" },
+            "properties": [
+              { "id": "unit", "value": "decmbytes" },
+              { "id": "decimals", "value": 0 },
+              { "id": "custom.width", "value": 140 }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "VRAM %" },
+            "properties": [
+              { "id": "unit", "value": "percent" },
+              { "id": "decimals", "value": 1 },
+              { "id": "custom.width", "value": 100 },
+              { "id": "custom.displayMode", "value": "color-background-solid" },
+              { "id": "thresholds", "value": { "mode": "absolute", "steps": [
+                { "color": "green", "value": null },
+                { "color": "yellow", "value": 80 },
+                { "color": "red", "value": 92 }
+              ]}}
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "target met" },
+            "properties": [
+              { "id": "custom.width", "value": 110 },
+              { "id": "custom.displayMode", "value": "color-background-solid" },
+              { "id": "mappings", "value": [
+                { "type": "value", "options": { "1": { "text": "✓ Yes", "color": "green" }, "0": { "text": "✗ No", "color": "red" } } }
+              ]}
+            ]
+          }
+        ]
+      },
+      "options": { "sortBy": [{ "displayName": "avg util %", "desc": true }] },
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "renameByName": {
+              "Value #util": "avg util %",
+              "Value #vmem_used": "VRAM used (MiB)",
+              "Value #vmem_total": "VRAM total (MiB)",
+              "Value #vmem_pct": "VRAM %",
+              "Value #target": "target met"
+            }
+          }
+        }
+      ],
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "avg by (cluster, node, gpu_id, gpu_name, vendor) (avg_over_time(gpu_utilization_percent{cluster=~\"$cluster\", node=~\"$node\", gpu_id=~\"$gpu\"}[$__range]))",
+          "instant": true, "refId": "util", "legendFormat": ""
+        },
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "avg by (cluster, node, gpu_id, gpu_name) (avg_over_time(gpu_memory_used_mib{cluster=~\"$cluster\", node=~\"$node\", gpu_id=~\"$gpu\"}[$__range]))",
+          "instant": true, "refId": "vmem_used", "legendFormat": ""
+        },
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "max by (cluster, node, gpu_id, gpu_name) (gpu_memory_total_mib{cluster=~\"$cluster\", node=~\"$node\", gpu_id=~\"$gpu\"})",
+          "instant": true, "refId": "vmem_total", "legendFormat": ""
+        },
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "avg by (cluster, node, gpu_id, gpu_name) (avg_over_time((gpu_memory_used_mib{cluster=~\"$cluster\", node=~\"$node\", gpu_id=~\"$gpu\"} / gpu_memory_total_mib{cluster=~\"$cluster\", node=~\"$node\", gpu_id=~\"$gpu\"} * 100)[$__range]))",
+          "instant": true, "refId": "vmem_pct", "legendFormat": ""
+        },
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "avg by (cluster, node, gpu_id, gpu_name) (avg_over_time(gpu_utilization_percent{cluster=~\"$cluster\", node=~\"$node\", gpu_id=~\"$gpu\"}[$__range])) >= bool 75",
+          "instant": true, "refId": "target", "legendFormat": ""
+        }
+      ]
+    }
+
+  ]
+}

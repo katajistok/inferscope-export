@@ -1,0 +1,43 @@
+# vmagent scrape configuration for Inferscope Axon DaemonSet.
+#
+# Use this if you scrape with vmagent instead of Prometheus Operator.
+# Mount this file into your vmagent deployment and reference it with
+# --promscrape.config=/etc/vmagent/inferscope.yml
+#
+# This config uses Kubernetes service discovery to automatically find all
+# Axon pods across the cluster without needing static IP lists.
+
+scrape_configs:
+
+  # ── Axon DaemonSet pods ────────────────────────────────────────────────
+  - job_name: "axon"
+    kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          names: ["inferscope"]
+
+    # Only scrape pods with the axon app label
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
+        action: keep
+        regex: axon
+
+      # Use the pod's host IP + hostPort (9101) — required because Axon
+      # uses hostNetwork: true so the pod IP equals the node IP
+      - source_labels: [__meta_kubernetes_pod_host_ip]
+        target_label: __address__
+        replacement: "$1:9101"
+
+      # Propagate useful labels onto every metric
+      - source_labels: [__meta_kubernetes_pod_node_name]
+        target_label: node
+
+      - source_labels: [__meta_kubernetes_namespace]
+        target_label: namespace
+
+      # Set cluster label — change per cluster or inject via vmagent --remoteWrite.label
+      - target_label: cluster
+        replacement: "prod-cluster-1"   # ← change per cluster
+
+    scrape_interval: 10s
+    metrics_path: /metrics

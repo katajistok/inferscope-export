@@ -1,0 +1,56 @@
+---
+# ServiceAccount used by Axon pods.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: axon
+  namespace: inferscope
+  labels:
+    app.kubernetes.io/name: axon
+    app.kubernetes.io/part-of: inferscope
+
+---
+# ClusterRole grants read access to the Kubernetes API resources that Axon
+# may need. Currently used for future Kubernetes discovery mode
+# (--discovery=kubernetes). In proc discovery mode (default) no API calls
+# are made, but the role is included so upgrading discovery mode requires
+# no RBAC changes.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: axon
+  labels:
+    app.kubernetes.io/name: axon
+    app.kubernetes.io/part-of: inferscope
+rules:
+  # Node info — allows Axon to label metrics with node metadata
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list", "watch"]
+
+  # Pod listing — used by Kubernetes discovery mode to find inference pods
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+
+  # Endpoints — for scraping pod /metrics by IP
+  - apiGroups: [""]
+    resources: ["endpoints"]
+    verbs: ["get", "list", "watch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: axon
+  labels:
+    app.kubernetes.io/name: axon
+    app.kubernetes.io/part-of: inferscope
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: axon
+subjects:
+  - kind: ServiceAccount
+    name: axon
+    namespace: inferscope

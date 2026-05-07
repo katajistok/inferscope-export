@@ -1,0 +1,58 @@
+# Service — exposes Axon metrics port for cluster-internal scraping.
+# Used by the ServiceMonitor below if you have Prometheus Operator installed.
+# If you scrape via pod annotations instead, this Service is optional.
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: axon
+  namespace: inferscope
+  labels:
+    app.kubernetes.io/name: axon
+    app.kubernetes.io/part-of: inferscope
+spec:
+  # ClusterIP: None makes this a headless service — each pod is individually
+  # addressable, which is correct for a DaemonSet metrics service.
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: axon
+  ports:
+    - name: metrics
+      port: 9101
+      targetPort: 9101
+      protocol: TCP
+
+---
+# ServiceMonitor — used by Prometheus Operator (kube-prometheus-stack) to
+# automatically configure scraping of all Axon pods.
+# If you don't use Prometheus Operator, delete this resource and configure
+# scraping via static_configs or pod annotations + vmagent instead.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: axon
+  namespace: inferscope
+  labels:
+    app.kubernetes.io/name: axon
+    app.kubernetes.io/part-of: inferscope
+    # This label must match the Prometheus Operator's serviceMonitorSelector.
+    # Adjust to match your Prometheus Operator configuration.
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: axon
+  endpoints:
+    - port: metrics
+      interval: 10s
+      path: /metrics
+      relabelings:
+        # Add node name label to all metrics from this pod
+        - sourceLabels: [__meta_kubernetes_pod_node_name]
+          targetLabel: node
+        # Add namespace label
+        - sourceLabels: [__meta_kubernetes_namespace]
+          targetLabel: namespace
+        # Add cluster label — set this to your cluster name
+        - targetLabel: cluster
+          replacement: "prod-cluster-1"    # ← change per cluster

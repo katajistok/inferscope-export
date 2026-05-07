@@ -1,0 +1,128 @@
+# Inferscope — single-host Docker Compose deployment
+#
+# Runs Axon (GPU/token metrics), Prometheus (storage), and Grafana
+# (visualization) on a single machine.
+#
+# Axon uses:
+#   - pid: host        → sees all host processes via /proc/<pid>/fd
+#   - network_mode: host → can reach inference runtimes on 127.0.0.1:<port>
+#   - /dev mounted     → access to GPU devices for rocm-smi / NVML / intel_gpu_top
+#   - /proc mounted ro → /proc fd scanning and net/tcp port discovery
+#   - /sys mounted ro  → sysfs vendor ID resolution and Intel hwmon metrics
+#
+# Usage:
+#   docker compose up -d
+#   docker compose logs -f axon
+#   docker compose down          # stop, keep data
+#   docker compose down -v       # stop, delete all metric data
+
+services:
+
+  # ── Axon ─────────────────────────────────────────────────────────────────
+  axon:
+    build:
+      context: ../../
+      dockerfile: deploy/docker/Dockerfile
+    container_name: axon
+    runtime: nvidia
+    restart: unless-stopped
+
+    # Required: gives Axon visibility into all host processes
+    pid: host
+
+    # network_mode: host is required so Axon can scrape inference runtime
+    # /metrics endpoints on 127.0.0.1:<port> (vLLM, llama.cpp, NIM etc.)
+    network_mode: host
+
+    # privileged covers all device and proc access in one setting.
+    # For tighter security, replace with the explicit caps + device list below.
+    privileged: true
+
+    # Granular alternative to privileged: true
+    # cap_add:
+    #   - SYS_PTRACE          # read /proc/<pid>/fd of other users
+    #   - DAC_READ_SEARCH     # follow fd symlinks across uid boundaries
+    #   - PERFMON             # Intel GPU perf counters (kernel ≥ 5.8)
+    # devices:
+    #   # NVIDIA — add one entry per GPU
+    #   - /dev/nvidia0:/dev/nvidia0
+    #   - /dev/nvidiactl:/dev/nvidiactl
+    #   - /dev/nvidia-uvm:/dev/nvidia-uvm
+    #   # AMD
+    #   - /dev/kfd:/dev/kfd
+    #   - /dev/dri:/dev/dri
+    #   # Intel
+    #   - /dev/dri:/dev/dri
+
+    volumes:
+      - /proc:/proc:ro          # process discovery and port scanning
+      - /sys:/sys:ro            # sysfs vendor IDs, Intel hwmon, power
+      - /dev:/dev:ro            # GPU device access
+
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=utility
+
+    command:
+      - --listen-address=:9101
+      - --poll-interval=5s
+      - --hw-interval=2s
+      - --nvidia=true
+      - --amd=false
+      - --intel=false
+
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9101/healthz"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+
+  # ── Prometheus ───────────────────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    container_name: inferscope-prometheus
+    restart: unless-stopped
+
+    # host network so Prometheus can reach Axon on localhost:9101
+    network_mode: host
+
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=30d
+      - --web.enable-lifecycle
+      - --web.listen-address=:9090
+
+    depends_on:
+      axon:
+        condition: service_healthy
+
+  # ── Grafana ──────────────────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:11.1.0
+    container_name: inferscope-grafana
+    restart: unless-stopped
+
+    network_mode: host
+
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+
+    environment:
+      - GF_SERVER_HTTP_PORT=3000
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin        # change in production
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/etc/grafana/provisioning/dashboards/overview.json
+
+    depends_on:
+      - prometheus
+
+volumes:
+  prometheus_data:
+  grafana_data:

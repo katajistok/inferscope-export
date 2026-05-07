@@ -1,0 +1,44 @@
+services:
+  axon:
+    build:
+      context: ../../
+      dockerfile: deploy/docker/Dockerfile
+    container_name: axon
+    restart: unless-stopped
+
+    # Required for /proc/<pid>/ access across all host processes
+    pid: host
+
+    # Access to GPU devices and /proc/*/net/tcp
+    privileged: true
+    # Or more granular:
+    # cap_add:
+    #   - SYS_PTRACE
+    #   - SYS_ADMIN
+    # devices:
+    #   - /dev/kfd:/dev/kfd          # AMD compute
+    #   - /dev/dri:/dev/dri          # AMD render nodes
+    #   - /dev/nvidia0:/dev/nvidia0  # NVIDIA GPU 0 (add per device)
+    #   - /dev/nvidiactl:/dev/nvidiactl
+    #   - /dev/nvidia-uvm:/dev/nvidia-uvm
+
+    volumes:
+      - /proc:/proc:ro
+      - /dev:/dev:ro
+      - /run/rocm:/run/rocm:ro       # AMD ROCm runtime socket
+
+    ports:
+      - "9101:9101"
+
+    environment:
+      - NODE_NAME=${HOSTNAME}
+
+    command:
+      - "--listen-address=:9101"
+      - "--poll-interval=5s"
+      - "--hw-interval=2s"
+      - "--amd=true"
+      - "--nvidia=true"
+      - "--intel=true"
+
+    network_mode: host   # needed to reach 127.0.0.1:<port> on the host for /metrics scraping

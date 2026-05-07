@@ -1,0 +1,166 @@
+# Axon DaemonSet — runs one Axon pod per node in the cluster.
+#
+# Two hostPID modes are documented here:
+#
+#   Mode A (default, recommended): hostPID: true
+#     Full parity with bare metal. Axon scans /proc on the host, discovers
+#     all inference processes, finds their listening ports, and scrapes
+#     /metrics endpoints on 127.0.0.1. Works without any knowledge of
+#     which runtimes are running or on which ports.
+#
+#   Mode B: hostPID: false (comment out hostPID line)
+#     For clusters where Pod Security Admission (PSA) or OPA/Gatekeeper
+#     policies forbid hostPID. Axon loses /proc-based process discovery
+#     but hardware metrics still work. Token metrics require the upcoming
+#     --discovery=kubernetes mode which scrapes pod IPs via the K8s API.
+#
+# GPU device access:
+#   The pod mounts /dev/dri (AMD + Intel) and /dev/kfd (AMD) and
+#   /dev/nvidia* (NVIDIA) from the host so rocm-smi, NVML, and
+#   intel_gpu_top can reach the actual hardware.
+#
+# Node selection:
+#   By default the DaemonSet runs on every node. To restrict to GPU nodes,
+#   uncomment the nodeSelector or add a node affinity rule.
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: axon
+  namespace: inferscope
+  labels:
+    app.kubernetes.io/name: axon
+    app.kubernetes.io/part-of: inferscope
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: axon
+
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: axon
+        app.kubernetes.io/part-of: inferscope
+      annotations:
+        # Tells Prometheus / vmagent to scrape this pod automatically
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9101"
+        prometheus.io/path: "/metrics"
+
+    spec:
+      serviceAccountName: axon
+      hostPID: true       # Mode A — remove this line for Mode B (no hostPID)
+      hostNetwork: true   # Required: lets Axon reach 127.0.0.1:<port> on the host
+                          # for scraping inference runtime /metrics endpoints
+
+      # Tolerate GPU taints so the pod is scheduled on dedicated GPU nodes
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+        - key: amd.com/gpu
+          operator: Exists
+          effect: NoSchedule
+        - key: gpu
+          operator: Exists
+          effect: NoSchedule
+
+      # Uncomment to restrict to nodes with a specific label:
+      # nodeSelector:
+      #   accelerator: "true"
+
+      # Run Axon before other workloads so metrics are available early
+      priorityClassName: system-node-critical
+
+      containers:
+        - name: axon
+          image: ghcr.io/youorg/inferscope/axon:latest
+          imagePullPolicy: Always
+
+          args:
+            - --listen-address=:9101
+            - --poll-interval=5s
+            - --hw-interval=2s
+            - --nvidia=true
+            - --amd=true
+            - --intel=true
+
+          ports:
+            - name: metrics
+              containerPort: 9101
+              hostPort: 9101      # expose on the node IP for Prometheus scraping
+              protocol: TCP
+
+          env:
+            # Makes the node name available inside the container.
+            # Axon reads os.Hostname() but this env var can override it
+            # for cases where the container hostname differs from the node name.
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+
+          securityContext:
+            privileged: true
+            # Granular alternative to privileged: true — uncomment and remove
+            # privileged if your cluster policy requires it:
+            # privileged: false
+            # capabilities:
+            #   add:
+            #     - SYS_PTRACE       # read /proc/<pid>/fd of other users
+            #     - DAC_READ_SEARCH  # follow fd symlinks across uid boundaries
+            #     - PERFMON          # Intel GPU perf counters (kernel ≥ 5.8)
+
+          volumeMounts:
+            - name: proc
+              mountPath: /proc
+              readOnly: true
+            - name: sys
+              mountPath: /sys
+              readOnly: true
+            - name: dev
+              mountPath: /dev
+              readOnly: true
+
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 9101
+            initialDelaySeconds: 10
+            periodSeconds: 30
+
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 9101
+            initialDelaySeconds: 5
+            periodSeconds: 10
+
+      volumes:
+        - name: proc
+          hostPath:
+            path: /proc
+
+        - name: sys
+          hostPath:
+            path: /sys
+
+        - name: dev
+          hostPath:
+            path: /dev
+
+      # Axon should terminate quickly — it holds no long-running connections
+      terminationGracePeriodSeconds: 10

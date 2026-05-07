@@ -1,0 +1,332 @@
+{
+  "title": "Inferscope — Overview",
+  "uid": "inferscope-overview",
+  "version": 2,
+  "schemaVersion": 39,
+  "refresh": "1m",
+  "time": { "from": "now-6h", "to": "now" },
+  "timezone": "browser",
+  "tags": ["inferscope", "overview", "kubernetes"],
+  "description": "High-level summary across all clusters. Token throughput, GPU utilization, active models, and efficiency at a glance.",
+
+  "templating": {
+    "list": [
+      {
+        "name": "cluster",
+        "type": "query",
+        "label": "Cluster",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "query": "label_values(gpu_utilization_percent, cluster)",
+        "refresh": 2,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "sort": 1,
+        "current": {}
+      },
+      {
+        "name": "node",
+        "type": "query",
+        "label": "Node",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "query": "label_values(gpu_utilization_percent{cluster=~\"$cluster\"}, node)",
+        "refresh": 2,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "sort": 1,
+        "current": {}
+      },
+      {
+        "name": "gpu",
+        "type": "query",
+        "label": "GPU",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "query": "label_values(gpu_utilization_percent{cluster=~\"$cluster\", node=~\"$node\"}, gpu_id)",
+        "refresh": 2,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "sort": 1,
+        "current": {}
+      }
+    ]
+  },
+
+  "panels": [
+
+    {
+      "id": 1,
+      "title": "Active GPU Nodes",
+      "type": "stat",
+      "gridPos": { "x": 0, "y": 0, "w": 4, "h": 4 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "count(count by (node) (gpu_utilization_percent{cluster=~\"$cluster\", node=~\"$node\"}))",
+          "legendFormat": "Nodes"
+        }
+      ]
+    },
+
+    {
+      "id": 2,
+      "title": "Total GPUs",
+      "type": "stat",
+      "gridPos": { "x": 4, "y": 0, "w": 4, "h": 4 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "count(gpu_utilization_percent{cluster=~\"$cluster\", node=~\"$node\", gpu_id=~\"$gpu\"})",
+          "legendFormat": "GPUs"
+        }
+      ]
+    },
+
+    {
+      "id": 3,
+      "title": "Active Models",
+      "type": "stat",
+      "gridPos": { "x": 8, "y": 0, "w": 4, "h": 4 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "count(gpu_process_running{cluster=~\"$cluster\", node=~\"$node\"} == 1)",
+          "legendFormat": "Models"
+        }
+      ]
+    },
+
+    {
+      "id": 4,
+      "title": "Current tok/s (all nodes)",
+      "type": "stat",
+      "gridPos": { "x": 12, "y": 0, "w": 4, "h": 4 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "red", "value": null },
+            { "color": "yellow", "value": 50 },
+            { "color": "green", "value": 500 }
+          ]}
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "area" },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "sum(gpu_inference_tokens_per_second{cluster=~\"$cluster\", node=~\"$node\"})",
+          "legendFormat": "tok/s"
+        }
+      ]
+    },
+
+    {
+      "id": 5,
+      "title": "Avg GPU Utilization",
+      "type": "stat",
+      "gridPos": { "x": 16, "y": 0, "w": 4, "h": 4 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "green", "value": null },
+            { "color": "yellow", "value": 70 },
+            { "color": "red", "value": 90 }
+          ]}
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "area" },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "avg(gpu_utilization_percent{cluster=~\"$cluster\", node=~\"$node\", gpu_id=~\"$gpu\"})",
+          "legendFormat": "avg util"
+        }
+      ]
+    },
+
+    {
+      "id": 6,
+      "title": "Total Power Draw",
+      "type": "stat",
+      "gridPos": { "x": 20, "y": 0, "w": 4, "h": 4 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "watt",
+          "decimals": 0,
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] }
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "sum(gpu_power_watts{cluster=~\"$cluster\", node=~\"$node\", gpu_id=~\"$gpu\"})",
+          "legendFormat": "watts"
+        }
+      ]
+    },
+
+    {
+      "id": 10,
+      "title": "Token Throughput — All Nodes",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 4, "w": 16, "h": 8 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 8, "showPoints": "never", "spanNulls": true }
+        }
+      },
+      "options": {
+        "tooltip": { "mode": "multi", "sort": "desc" },
+        "legend": { "displayMode": "table", "placement": "right", "calcs": ["mean", "max"] }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "sum by (cluster, node) (rate(gpu_inference_generated_tokens_total{cluster=~\"$cluster\", node=~\"$node\"}[$__rate_interval]) * 60)",
+          "legendFormat": "{{cluster}} / {{node}}"
+        }
+      ]
+    },
+
+    {
+      "id": 11,
+      "title": "Tokens — 24h per Node",
+      "type": "bargauge",
+      "gridPos": { "x": 16, "y": 4, "w": 8, "h": 8 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "color": { "mode": "palette-classic" },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] }
+        }
+      },
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "reduceOptions": { "calcs": ["lastNotNull"] }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "sum by (node) (increase(gpu_inference_generated_tokens_total{cluster=~\"$cluster\", node=~\"$node\"}[24h]))",
+          "legendFormat": "{{node}}",
+          "instant": true
+        }
+      ]
+    },
+
+    {
+      "id": 20,
+      "title": "GPU Utilization — All Nodes",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 12, "w": 12, "h": 8 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent", "min": 0, "max": 100,
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 6, "showPoints": "never" }
+        }
+      },
+      "options": {
+        "tooltip": { "mode": "multi", "sort": "desc" },
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "gpu_utilization_percent{cluster=~\"$cluster\", node=~\"$node\", gpu_id=~\"$gpu\"}",
+          "legendFormat": "{{node}} / gpu{{gpu_id}} ({{gpu_name}})"
+        }
+      ]
+    },
+
+    {
+      "id": 21,
+      "title": "Tokens per Watt — Efficiency",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 12, "w": 12, "h": 8 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 2,
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 6, "showPoints": "never" }
+        }
+      },
+      "options": {
+        "tooltip": { "mode": "multi", "sort": "desc" },
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean"] }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "gpu_inference_tokens_per_watt{cluster=~\"$cluster\", node=~\"$node\"}",
+          "legendFormat": "{{node}} / {{model}}"
+        }
+      ]
+    },
+
+    {
+      "id": 30,
+      "title": "Active Inference Processes",
+      "type": "table",
+      "gridPos": { "x": 0, "y": 20, "w": 24, "h": 7 },
+      "fieldConfig": {
+        "defaults": { "custom": { "align": "left" } }
+      },
+      "options": { "sortBy": [{ "displayName": "cluster", "desc": false }] },
+      "transformations": [
+        { "id": "labelsToFields", "options": { "mode": "columns" } },
+        {
+          "id": "filterFieldsByName",
+          "options": { "include": { "names": ["cluster", "node", "gpu_id", "vendor", "model", "runtime", "source"] } }
+        }
+      ],
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "gpu_process_running{cluster=~\"$cluster\", node=~\"$node\"} == 1",
+          "legendFormat": "",
+          "instant": true
+        }
+      ]
+    }
+
+  ]
+}
