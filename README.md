@@ -20,6 +20,30 @@ Token metrics (opportunistic /metrics scrape)
 
 ---
 
+## Screenshots
+
+### GPU Overview
+![GPU Overview](screenshots/grafana_gpu_overview.jpg)
+Cross-cluster summary showing active nodes, GPU utilization, token throughput, VRAM usage, and active inference processes at a glance.
+
+### GPU Hardware
+![GPU Hardware](screenshots/grafana_gpu_hardware.jpg)
+Raw hardware metrics per GPU — utilization, VRAM, power draw, temperature, and clock speed, with 24h average bar gauges.
+
+### GPU Token Consumption
+![GPU Token Consumption](screenshots/grafana_gpu_token_consumption.jpg)
+Token generation rate and totals over selectable time windows, broken down by node and GPU.
+
+### GPU Power & Efficiency
+![GPU Power & Efficiency](screenshots/grafana_gpu_power_and_efficiency.jpg)
+Energy consumption and tokens-per-watt efficiency rankings across all GPUs — highlights which nodes deliver the best inference ROI.
+
+### GPU Utilization & Health
+![GPU Utilization & Health](screenshots/grafana_gpu_utilization_and_health.jpg)
+Fleet-wide utilization health view with a 75% target gauge, per-GPU bar charts, VRAM trend, and a utilization distribution chart.
+
+---
+
 ## Components
 
 | Component | Role |
@@ -237,10 +261,10 @@ cascading dropdowns: **Cluster → Node → GPU**.
 
 | Dashboard | File | Purpose | Default range |
 |-----------|------|---------|---------------|
-| **Overview** | `overview.json` | Cross-cluster summary — throughput, utilization, active models, efficiency | 6h |
-| **Token Consumption** | `tokens.json` | Token usage with 1h/6h/12h/24h fixed-window table, trend charts, per-model breakdown | 24h |
+| **GPU Overview** | `overview.json` | Cross-cluster summary — throughput, utilization, active models, efficiency | 6h |
+| **GPU Token Consumption** | `tokens.json` | Token usage with 1h/6h/12h/24h fixed-window table, trend charts, per-model breakdown | 24h |
 | **GPU Hardware** | `gpu-hardware.json` | Raw hardware — utilization, VRAM, power, temperature, clock per GPU | 3h |
-| **Power & Efficiency** | `power-efficiency.json` | Tokens per watt, power draw ranking, estimated kWh, tokens per kWh | 24h |
+| **GPU Power & Efficiency** | `power-efficiency.json` | Tokens per watt, power draw ranking, estimated kWh, tokens per kWh | 24h |
 | **GPU Utilization & Health** | `utilization.json` | Hardware ROI view — fleet average vs 75% target, VRAM, per-GPU table with target met/not met | 24h |
 
 The **Utilization & Health** dashboard is the primary one for organizational

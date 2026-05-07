@@ -77,6 +77,22 @@ Inferscope uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Axon's own `node` label with the correct hostname. Replaced with a simple
   `cluster: local` injection only.
 
+### Changed
+
+- Renamed three dashboards to include "GPU" consistently in all titles:
+  `Inferscope — Overview` → `Inferscope — GPU Overview`,
+  `Inferscope — Token Consumption` → `Inferscope — GPU Token Consumption`,
+  `Inferscope — Power & Efficiency` → `Inferscope — GPU Power & Efficiency`.
+
+### Documentation
+
+- Added Screenshots section to README with annotated images of all five
+  Grafana dashboards.
+- Fixed vmagent scrape config example in README — removed the `node` relabeling
+  rule that would have overwritten Axon's hostname label with an IP address.
+- Added caveat to the efficiency metric description noting that mobile/workstation
+  GPUs (e.g. RTX A1000) do not expose power draw via NVML.
+
 ---
 
 ## [0.1.0] — 2026-05-06
