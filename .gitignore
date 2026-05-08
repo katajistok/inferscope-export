@@ -1,5 +1,5 @@
 # Build output
-axon
+/axon
 *.exe
 
 # Environment / secrets
