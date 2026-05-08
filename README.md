@@ -18,6 +18,8 @@ Token metrics (opportunistic /metrics scrape)
   Thanos → Grafana
 ```
 
+> **Note:** This project has only been tested with NVIDIA GPUs in a local environment using Docker Compose. Other GPU vendors, deployment methods, or production setups may require additional configuration and are not officially supported.
+
 ---
 
 ## Screenshots
